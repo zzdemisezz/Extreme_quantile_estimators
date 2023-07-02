@@ -13,19 +13,22 @@ import argparse
 parser = argparse.ArgumentParser(description='Runner')
 parser.add_argument('--processes', '-p',
                     help="number of processes. No multiprocessing by default",
-                    default=1,
+                    default=5,
                     type=int)
 
 args = parser.parse_args()
 n_processes = args.processes
 
 config = get_config()  # load .yaml configuration file
+
 condition = len(config["data"]["params"]["rho"]) + 1  # data order condition
 config["data"]["order_condition"] = condition
+
 data_sampler = DataSampler(**config["data"])
 
 n_data = config["data"]["n_data"]
 n_data = int(n_data - (n_data * config["data"]["percentile"]))
+
 
 # utilities
 verbose = config["training"]["verbose"]
@@ -49,11 +52,13 @@ def train_a_replication(replication=1):
     """
     print("REPLICATION #{}".format(replication))
     model_filename_rep = model_filename + "-rep{}".format(replication)
+
     pathfile = Path("ckpt", config["data"]["distribution"], "training", "{}.pt".format(model_filename_rep))
     if pathfile.is_file():  # if the file exists, don't train it again !
         try:
             pt_ckpt = torch.load(pathfile, map_location="cpu")
             for chkpt_epoch in ckpt_epochs:  # check that all epochs have been trained
+
                 pt_ckpt["epoch{}".format(chkpt_epoch)]["params"]
             return  # if it is the case, move to the next replication file
         except (EOFError, KeyError):  # if one is missing, remove the file and the csv line
@@ -74,6 +79,7 @@ def train_a_replication(replication=1):
                                                                                         config["data"]["params"],
                                                                                         total_data, model_filename_rep), "="*10)
     model = ExtrapolateNN(**config["model"], model_filename=model_filename_rep)
+
     model.train(data_train=data, X=X_order, distribution=config["data"]["distribution"], **config["training"])
     return
 

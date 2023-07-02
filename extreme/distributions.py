@@ -65,7 +65,7 @@ class Burr(Frechet2OC):
         return self.evi / (1-x**self.rho)
 
 class InverseGamma(Frechet2OC):
-    def __init__(self, evi):
+    def __init__(self, evi, rho):
         super(InverseGamma, self).__init__()
         self.evi = evi
         self.rho = np.array(-self.evi)
@@ -92,7 +92,7 @@ class Frechet(Frechet2OC):
         return self.law.ppf(u)
 
 class Fisher(Frechet2OC):
-    def __init__(self, evi):
+    def __init__(self, evi, rho):
         super(Fisher, self).__init__()
         self.evi = evi
         self.rho = np.array([-2./self.evi])
@@ -106,7 +106,7 @@ class Fisher(Frechet2OC):
 
 
 class GPD(Frechet2OC):
-    def __init__(self, evi):
+    def __init__(self, evi, rho):
         super(GPD, self).__init__()
         self.evi = evi
         self.rho = np.array([-self.evi])

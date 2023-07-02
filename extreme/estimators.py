@@ -3,12 +3,13 @@ import scipy.stats
 from rpy2 import robjects as ro
 import rpy2.robjects.numpy2ri
 
-from extreme.data_management import load_quantiles, DataSampler
+from extreme.data_management import load_quantiles, DataSampler, DataSampler_real
 import numpy as np
 from pathlib import Path
 
-
-list_estimators = ["W", "RW", "CW", "CH", "CHp", "CHps", "PRBp", "PRBps"]
+#Here you specifify which estimators you want to use.
+#The options are ["W", "RW", "CW", "CH", "CHp", "CHps", "PRBp", "PRBps"]
+list_estimators = ["W", "RW", "CW"]
 
 # ==================================================
 #                  Tail index estimator
@@ -65,7 +66,7 @@ class TailIndexEstimator():
         r = ro.r
         r['source']('extreme/revt.R')
         self.get_rho_beta = r.get_rho_beta
-        self.l_run = r.lrun
+        #self.l_run = r.lrun
 
         self.X_order = X_order
         self.n_data = X_order.shape[0]
@@ -348,6 +349,7 @@ class ExtremeQuantileEstimator(TailIndexEstimator):
     def quantile_estimator(self, method, k_anchor):
         return self.dict_quantile_estimators[method](k_anchor)
 
+    #not sure what this is used for
     def get_k(self, x):
         """
         best k based on Algo 1 from Gomes, 2018
@@ -666,6 +668,89 @@ def evt_estimators(n_replications, n_data, distribution, params, metric="median"
         df.loc["RMSE", estimator] = dict_evt[estimator][metric]["rmse_bestK"]
     return df
 
+#estimates the quantiles for the real dataset
+def evt_estimators_real(n_replications, n_data, distribution, params, metric="median", return_full=False):
+    """
+    Evaluation of extreme quantile estimators based on the real dataset
+
+    Parameters
+    ----------
+    n_replications :
+    n_data :
+    distribution :
+    params :
+    n_quantile :
+    return_full :
+
+    Returns
+    -------
+
+    """
+    dict_evt = {estimator: {_metric: {"series": [], "rmse_bestK": None, "q_bestK": [],
+                            "bestK": []}for _metric in ["mean", "median"]} for estimator in list_estimators}
+
+    pathdir = Path("ckpt", distribution, "extrapolation", str(params))
+    pathdir.mkdir(parents=True, exist_ok=True)
+
+    anchor_points = np.arange(2, n_data)  # 2, ..., n-1
+    EXTREME_ALPHA = 0.05 #0.005, 0.01, 0.05  # extreme alpha
+    data_sampler = DataSampler_real(distribution=distribution, params=params)
+    real_quantile = 742.75
+
+    try:
+        dict_evt = np.load(Path(pathdir, "evt_estimators_rep{}_ndata{}.npy".format(n_replications, n_data)), allow_pickle=True)[()]
+    except FileNotFoundError:
+        # Estimators
+        # -----------------
+        for replication in range(1, n_replications + 1):  # for each replication
+            print("rep ", replication)
+            #X_order = load_quantiles(distribution, params, n_data, rep=replication)
+            #test = DataSampler_real("real", params=None, percentile=0)
+            X_order = data_sampler.simulate_quantiles(n_data=1) # replication order statistics X_1,n, ..., X_n,n
+            dict_q = {estimator: [] for estimator in list_estimators}  # dict of quantiles
+            evt_estimators = ExtremeQuantileEstimator(X=X_order, alpha=EXTREME_ALPHA)
+
+            for estimator in list_estimators:
+                for anchor_point in anchor_points:  # compute all quantile estimators
+                    dict_q[estimator].append(evt_estimators.quantile_estimator(k_anchor=anchor_point, method=estimator))
+
+                bestK = random_forest_k(np.array(dict_q[estimator]), 10000)
+
+                # MEAN
+                dict_evt[estimator]["mean"]["series"].append(dict_q[estimator])
+                dict_evt[estimator]["mean"]["q_bestK"].append(dict_q[estimator][int(bestK)])
+                dict_evt[estimator]["mean"]["bestK"].append(bestK + 2)  # k \geq 2
+
+                # MEDIAN
+                dict_evt[estimator]["median"]["series"].append(dict_q[estimator])
+                dict_evt[estimator]["median"]["q_bestK"].append(dict_q[estimator][int(bestK)])
+                dict_evt[estimator]["median"]["bestK"].append(bestK + 2)  # k \geq 2
+
+        # if not Path(pathdir, "evt_estimators_rep{}.npy".format(n_replications)).is_file():
+        for estimator in list_estimators:
+            # MEAN
+            dict_evt[estimator]["mean"]["var"] = np.array(dict_evt[estimator]["mean"]["series"]).var(axis=0)
+            dict_evt[estimator]["mean"]["rmse"] = ((np.array(dict_evt[estimator]["mean"]["series"]) / real_quantile - 1) ** 2).mean(axis=0)
+            dict_evt[estimator]["mean"]["series"] = np.array(dict_evt[estimator]["mean"]["series"]).mean(axis=0)
+            dict_evt[estimator]["mean"]["rmse_bestK"] = ((np.array(dict_evt[estimator]["mean"]["q_bestK"]) / real_quantile - 1) ** 2).mean()
+
+            # MEDIAN
+            dict_evt[estimator]["median"]["var"] = np.array(dict_evt[estimator]["median"]["series"]).var(axis=0)
+            dict_evt[estimator]["median"]["rmse"] = np.median((np.array(dict_evt[estimator]["median"]["series"]) / real_quantile - 1) ** 2, axis=0)
+            dict_evt[estimator]["median"]["series"] = np.median(dict_evt[estimator]["median"]["series"], axis=0)
+            dict_evt[estimator]["median"]["rmse_bestK"] = np.median((np.array(dict_evt[estimator]["median"]["q_bestK"]) / real_quantile - 1) ** 2)
+
+        np.save(Path(pathdir, "evt_estimators_rep{}_ndata{}.npy".format(n_replications, n_data)), dict_evt)
+
+    if return_full:
+        return dict_evt
+    df = pd.DataFrame(columns=list_estimators, index=["RMSE", "K", "quantile"])
+    #prints the estimated quantiles
+    for estimator in list_estimators:
+        df.loc["RMSE", estimator] = dict_evt[estimator][metric]["rmse_bestK"]
+        df.loc["K", estimator] = dict_evt[estimator][metric]["bestK"][0]
+        df.loc["quantile", estimator] = np.round(np.array(dict_evt[estimator][metric]["q_bestK"]).ravel()[0], 4)
+    return df
 
 
 

@@ -90,6 +90,7 @@ class ExtrapolateNN():
         self.dict_criteria = {"loss": None, "variance": None, "r_variance": None,
                               "mad": None,"r_mad": None,
                               "aad": None, "r_aad": None}
+        # has as input dict_criteria, and adds value + epoch to each one
         self.init_dict_crit()
         return
 
@@ -194,7 +195,7 @@ class ExtrapolateNN():
         """criterias evaluation and save the best epoch"""
         with torch.no_grad():
             n_data = X_order.shape[0]
-            EXTREME_ALPHA = 1/(2*n_data)  # extreme alpha TODO: put it as a parameter in the yaml file
+            EXTREME_ALPHA = 1/(2*n_data) #0.005, 0.01, 0.05  # extreme alpha TODO: put it as a parameter in the yaml file
 
             k_anchor = np.arange(2, n_data)  # k=2,...,n-1
             q_nn = self.extrapolate(alpha=EXTREME_ALPHA, k_anchor=k_anchor, X_order=X_order).ravel()  # extrapolated quantile neural network

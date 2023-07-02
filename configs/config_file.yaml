@@ -37,12 +37,13 @@
 
 # ==========================================================================
 
+#Simulated
 data:
-  distribution: burr  # {burr, frechet, fisher, invgamma, gpd, nhw, student}
+  distribution: nhw  # {burr, frechet, fisher, invgamma, gpd, nhw, student}
   params:
     evi: !!float 1.  # extreme value index (gamma)
-    rho: [-0.25]  # second order parameter. For laws {frechet, fisher, invgamma, gpd, student}, this parameter will not be considered
-  n_data: !!int 500  # sample size
+    rho: [-0.125]  # second order parameter. For laws {frechet, fisher, invgamma, gpd, student}, this parameter will not be considered
+  n_data: !!int 1500  # sample size, sample size real dataset is 1323
   percentile: !!float 0.  # percentile of data for training (ie if 0, train on all available) (thresholding)
 
 training:
@@ -50,11 +51,33 @@ training:
   batch_size: !!int 1024
   loss: "l1"
   verbose: !!int 1  # save parameters and compute metrics every X epochs
-  replications: !!int 500
+  replications: !!int 10
 
 model:
-  trunc: !!int 4  # truncation J>1. Refers to the number of neurons: J(J-1)/2
+  trunc: !!int 2  # truncation J>1. Refers to the number of neurons: J(J-1)/2
   optimizer: adam
   lr: !!float 1e-3
   lamb: !!float 0.  # regularization parameter
+
+#Real dataset
+#data:
+#  distribution: be_firelosses
+#  params:
+#    evi: !!float 1.  # extreme value index (gamma), not considered but used for bookkeeping
+#    rho: [-0.005]  # second order parameter, not considered but used for bookkeeping
+#  n_data: !!int 1323  # sample size
+#  percentile: !!float 0.  # percentile of data for training (ie if 0, train on all available) (thresholding)
+
+#training:
+#  n_epochs: !!int 500
+#  batch_size: !!int 1024
+#  loss: "l1"
+#  verbose: !!int 1  # save parameters and compute metrics every X epochs
+#  replications: !!int 1
+
+#model:
+#  trunc: !!int 5  # truncation J>1. Refers to the number of neurons: J(J-1)/2
+#  optimizer: adam
+#  lr: !!float 1e-3
+#  lamb: !!float 0.  # regularization parameter
 
